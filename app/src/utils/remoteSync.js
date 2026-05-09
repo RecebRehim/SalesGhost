@@ -10,6 +10,10 @@ const WISHLIST_KEY = 'ecommerce_wishlist_data';
 const CONSENT_KEY = 'ecommerce_tracking_consent';
 const N8N_WEBHOOK_KEY = 'ecommerce_n8n_webhook_url';
 
+/** Monotonic cart/wishlist edit time for last-write-wins merge vs Supabase. */
+export const CART_UPDATED_AT_KEY = 'ecommerce_cart_updated_at';
+export const WISHLIST_UPDATED_AT_KEY = 'ecommerce_wishlist_updated_at';
+
 let applyingRemote = false;
 let pushTimer = null;
 
@@ -89,24 +93,32 @@ const mergeNotifications = (local = [], remote = []) => {
   );
 };
 
-const mergeCart = (local = [], remote = []) => {
-  const byId = new Map();
-  [...local, ...remote].forEach((item) => {
-    if (!item?.id) return;
-    const prev = byId.get(item.id);
-    if (!prev || (item.quantity || 0) > (prev.quantity || 0)) {
-      byId.set(item.id, { ...item });
-    }
-  });
-  return [...byId.values()];
+const parseTs = (iso) => {
+  if (!iso) return 0;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) ? t : 0;
 };
 
-const mergeWishlist = (local = [], remote = []) => {
-  const byId = new Map();
-  [...local, ...remote].forEach((item) => {
-    if (item?.id) byId.set(item.id, item);
-  });
-  return [...byId.values()];
+const maxIso = (a, b) => {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return parseTs(a) >= parseTs(b) ? a : b;
+};
+
+export const touchCartUpdatedAt = () => {
+  try {
+    localStorage.setItem(CART_UPDATED_AT_KEY, new Date().toISOString());
+  } catch {
+    /* ignore */
+  }
+};
+
+export const touchWishlistUpdatedAt = () => {
+  try {
+    localStorage.setItem(WISHLIST_UPDATED_AT_KEY, new Date().toISOString());
+  } catch {
+    /* ignore */
+  }
 };
 
 export const buildSnapshot = () => ({
@@ -115,6 +127,8 @@ export const buildSnapshot = () => ({
   mockDb: readJson(DB_KEY, null),
   cart: readJson(CART_KEY, []),
   wishlist: readJson(WISHLIST_KEY, []),
+  cartUpdatedAt: localStorage.getItem(CART_UPDATED_AT_KEY),
+  wishlistUpdatedAt: localStorage.getItem(WISHLIST_UPDATED_AT_KEY),
   consent: localStorage.getItem(CONSENT_KEY) || 'unset',
   n8nWebhookUrl: localStorage.getItem(N8N_WEBHOOK_KEY) || '',
 });
@@ -139,6 +153,7 @@ const pushToRemote = async () => {
     notifications: [],
     updatedAt: new Date().toISOString(),
   };
+  const nowIso = new Date().toISOString();
   const { error } = await supabase.from('salesghost_sync').upsert(
     {
       account_id: snap.accountId,
@@ -146,9 +161,11 @@ const pushToRemote = async () => {
       mock_database: db,
       cart: snap.cart,
       wishlist: snap.wishlist,
+      cart_updated_at: snap.cartUpdatedAt ?? null,
+      wishlist_updated_at: snap.wishlistUpdatedAt ?? null,
       consent: snap.consent,
       n8n_webhook_url: snap.n8nWebhookUrl,
-      updated_at: new Date().toISOString(),
+      updated_at: nowIso,
     },
     { onConflict: 'account_id' },
   );
@@ -185,6 +202,17 @@ export const pullRemoteAndMerge = async () => {
 
     const localDb = readJson(DB_KEY, {});
     const remoteDb = data.mock_database || {};
+    const clearedAt = maxIso(
+      localDb.notificationsClearedAt,
+      remoteDb.notificationsClearedAt,
+    );
+    const mergedNotifications = mergeNotifications(
+      localDb.notifications || [],
+      remoteDb.notifications || [],
+    ).filter((n) => {
+      if (!clearedAt) return true;
+      return new Date(n.createdAt) >= new Date(clearedAt);
+    });
     const mergedDb = {
       users:
         localDb.users?.length
@@ -198,22 +226,47 @@ export const pullRemoteAndMerge = async () => {
             ],
       events: mergeEventsById(localDb.events || [], remoteDb.events || []),
       sessions: mergeSessions(localDb.sessions || [], remoteDb.sessions || []),
-      notifications: mergeNotifications(
-        localDb.notifications || [],
-        remoteDb.notifications || [],
-      ),
+      notifications: mergedNotifications,
+      notificationsClearedAt: clearedAt,
       updatedAt: new Date().toISOString(),
     };
     safeWrite(DB_KEY, mergedDb);
 
-    safeWrite(
-      CART_KEY,
-      mergeCart(readJson(CART_KEY, []), data.cart || []),
-    );
-    safeWrite(
-      WISHLIST_KEY,
-      mergeWishlist(readJson(WISHLIST_KEY, []), data.wishlist || []),
-    );
+    const remoteCart = Array.isArray(data.cart) ? data.cart : [];
+    let localCartAt = localStorage.getItem(CART_UPDATED_AT_KEY);
+    if (!localCartAt && readJson(CART_KEY, []).length > 0) {
+      touchCartUpdatedAt();
+      localCartAt = localStorage.getItem(CART_UPDATED_AT_KEY);
+    }
+    const remoteCartAt = data.cart_updated_at ?? null;
+    if (parseTs(remoteCartAt) > parseTs(localCartAt)) {
+      safeWrite(CART_KEY, remoteCart);
+      if (remoteCartAt) {
+        try {
+          localStorage.setItem(CART_UPDATED_AT_KEY, remoteCartAt);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    const remoteWish = Array.isArray(data.wishlist) ? data.wishlist : [];
+    let localWishAt = localStorage.getItem(WISHLIST_UPDATED_AT_KEY);
+    if (!localWishAt && readJson(WISHLIST_KEY, []).length > 0) {
+      touchWishlistUpdatedAt();
+      localWishAt = localStorage.getItem(WISHLIST_UPDATED_AT_KEY);
+    }
+    const remoteWishAt = data.wishlist_updated_at ?? null;
+    if (parseTs(remoteWishAt) > parseTs(localWishAt)) {
+      safeWrite(WISHLIST_KEY, remoteWish);
+      if (remoteWishAt) {
+        try {
+          localStorage.setItem(WISHLIST_UPDATED_AT_KEY, remoteWishAt);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
 
     if (data.consent) localStorage.setItem(CONSENT_KEY, data.consent);
     if (data.n8n_webhook_url !== undefined && data.n8n_webhook_url !== null) {
@@ -226,6 +279,40 @@ export const pullRemoteAndMerge = async () => {
   } finally {
     applyingRemote = false;
   }
+};
+
+let realtimePullTimer = null;
+
+/** Subscribe to Postgres changes on `salesghost_sync` for instant pull (enable Realtime + replica for this table in Supabase). */
+export const subscribeSalesghostSync = () => {
+  const supabase = getClient();
+  if (!supabase) return () => {};
+  const channel = supabase
+    .channel(`sg-sync-${SYNC_ACCOUNT_ID}`)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'salesghost_sync',
+        filter: `account_id=eq.${SYNC_ACCOUNT_ID}`,
+      },
+      () => {
+        if (realtimePullTimer) clearTimeout(realtimePullTimer);
+        realtimePullTimer = setTimeout(() => {
+          realtimePullTimer = null;
+          pullRemoteAndMerge();
+        }, 400);
+      },
+    )
+    .subscribe();
+  return () => {
+    if (realtimePullTimer) {
+      clearTimeout(realtimePullTimer);
+      realtimePullTimer = null;
+    }
+    supabase.removeChannel(channel);
+  };
 };
 
 export const onRemoteSyncReady = (callback) => {

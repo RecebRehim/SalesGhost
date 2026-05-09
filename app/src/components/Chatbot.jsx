@@ -48,7 +48,11 @@ export function Chatbot({ onRefresh }) {
         hasNew = true;
       }
     }
-    if (hasNew) setOpen(true);
+    if (hasNew) {
+      setOpen(true);
+      const alertSound = new Audio('/audio/notification.mp3');
+      alertSound.play().catch(() => {});
+    }
   }, [items]);
 
   useEffect(() => {

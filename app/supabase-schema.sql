@@ -6,12 +6,21 @@ create table if not exists public.salesghost_sync (
   mock_database jsonb not null default '{}'::jsonb,
   cart jsonb not null default '[]'::jsonb,
   wishlist jsonb not null default '[]'::jsonb,
+  cart_updated_at timestamptz,
+  wishlist_updated_at timestamptz,
   consent text not null default 'unset',
   n8n_webhook_url text not null default '',
   updated_at timestamptz not null default now()
 );
 
+-- Existing projects: run once in SQL Editor if the table already existed without these columns:
+-- alter table public.salesghost_sync add column if not exists cart_updated_at timestamptz;
+-- alter table public.salesghost_sync add column if not exists wishlist_updated_at timestamptz;
+
 alter table public.salesghost_sync enable row level security;
+
+-- Realtime (optional): Dashboard → Database → Replication, or:
+-- alter publication supabase_realtime add table public.salesghost_sync;
 
 -- Demo-only: allow anonymous read/write for the single shared account (hackathon).
 drop policy if exists "salesghost_anon_all" on public.salesghost_sync;

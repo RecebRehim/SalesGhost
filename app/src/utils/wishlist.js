@@ -1,4 +1,4 @@
-import { scheduleRemotePush } from './remoteSync';
+import { scheduleRemotePush, touchWishlistUpdatedAt } from './remoteSync';
 
 const WISHLIST_KEY = 'ecommerce_wishlist_data';
 
@@ -13,5 +13,6 @@ export const getWishlist = () => {
 
 export const saveWishlist = (wishlist) => {
   localStorage.setItem(WISHLIST_KEY, JSON.stringify(wishlist));
+  touchWishlistUpdatedAt();
   scheduleRemotePush();
 };

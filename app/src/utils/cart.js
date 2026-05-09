@@ -1,4 +1,4 @@
-import { scheduleRemotePush } from './remoteSync';
+import { scheduleRemotePush, touchCartUpdatedAt } from './remoteSync';
 
 const CART_KEY = 'ecommerce_cart_data';
 
@@ -13,5 +13,6 @@ export const getCart = () => {
 
 export const saveCart = (cart) => {
   localStorage.setItem(CART_KEY, JSON.stringify(cart));
+  touchCartUpdatedAt();
   scheduleRemotePush();
 };

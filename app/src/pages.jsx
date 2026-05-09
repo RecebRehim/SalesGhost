@@ -15,6 +15,8 @@ import {
   setN8nWebhookUrl,
 } from './utils/database';
 import {
+  CART_UPDATED_AT_KEY,
+  WISHLIST_UPDATED_AT_KEY,
   isRemoteSyncConfigured,
   onRemoteSyncReady,
   pullRemoteAndMerge,
@@ -508,7 +510,7 @@ export const AnalyticsPage = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 lg:py-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"><h1 className="text-2xl font-bold">Analytics Dashboard</h1><div className="flex flex-wrap gap-2"><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => { generateDemoEvents(products); refresh(); }}>Demo Mode</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={refresh}>Refresh</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={exportJson}>Export JSON</button><button className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); refresh(); }}>Clear Analytics</button><button className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); localStorage.removeItem('ecommerce_cart_data'); localStorage.removeItem('ecommerce_wishlist_data'); localStorage.removeItem('ecommerce_mock_database'); scheduleRemotePush(); refresh(); }}>Reset Demo Data</button></div></div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"><h1 className="text-2xl font-bold">Analytics Dashboard</h1><div className="flex flex-wrap gap-2"><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => { generateDemoEvents(products); refresh(); }}>Demo Mode</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={refresh}>Refresh</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={exportJson}>Export JSON</button><button className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); refresh(); }}>Clear Analytics</button><button className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); localStorage.removeItem('ecommerce_cart_data'); localStorage.removeItem('ecommerce_wishlist_data'); localStorage.removeItem(CART_UPDATED_AT_KEY); localStorage.removeItem(WISHLIST_UPDATED_AT_KEY); localStorage.removeItem('ecommerce_mock_database'); scheduleRemotePush(); refresh(); }}>Reset Demo Data</button></div></div>
       <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-5">
         <MetricCard label="Total Events" value={stats.totalEvents} />
         <MetricCard label="Product Views" value={stats.totalProductViews} />

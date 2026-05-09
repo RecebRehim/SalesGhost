@@ -30,6 +30,8 @@ const defaultDb = () => ({
   events: [],
   sessions: [],
   notifications: [],
+  /** When set, notifications with older createdAt are dropped on cloud merge (after user clears history). */
+  notificationsClearedAt: null,
   updatedAt: new Date().toISOString(),
 });
 
@@ -41,6 +43,7 @@ export const getDb = () => {
   if (!db.events) db.events = [];
   if (!db.sessions) db.sessions = [];
   if (!db.notifications) db.notifications = [];
+  if (!('notificationsClearedAt' in db)) db.notificationsClearedAt = null;
   return db;
 };
 
@@ -113,6 +116,7 @@ export const markAllNotificationsRead = () => {
 /** Removes all in-app notifications and n8n chat messages, local + cloud sync. */
 export const clearAllNotifications = () => {
   const db = getDb();
+  db.notificationsClearedAt = new Date().toISOString();
   db.notifications = [];
   saveDb(db);
   if (typeof window !== 'undefined') {

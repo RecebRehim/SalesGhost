@@ -11,6 +11,7 @@ import {
   isRemoteSyncConfigured,
   onRemoteSyncReady,
   pullRemoteAndMerge,
+  subscribeSalesghostSync,
 } from './utils/remoteSync';
 
 function App() {
@@ -56,9 +57,11 @@ function App() {
       setNotifications(getNotifications());
     });
 
+    const unsubRealtime = subscribeSalesghostSync();
+
     const pollRemote = setInterval(() => {
       if (isRemoteSyncConfigured()) pullRemoteAndMerge();
-    }, 5000);
+    }, 12000);
 
     const poll = setInterval(() => {
       setNotifications(getNotifications());
@@ -68,6 +71,7 @@ function App() {
     return () => {
       cancelled = true;
       unsub();
+      unsubRealtime();
       clearInterval(pollRemote);
       clearInterval(poll);
       window.removeEventListener('storage', onStorage);
