@@ -11,6 +11,7 @@ import {
   isRemoteSyncConfigured,
   onRemoteSyncReady,
   pullRemoteAndMerge,
+  quickPullIfRemoteChanged,
   subscribeSalesghostSync,
 } from './utils/remoteSync';
 
@@ -59,20 +60,29 @@ function App() {
 
     const unsubRealtime = subscribeSalesghostSync();
 
-    const pollRemote = setInterval(() => {
-      if (isRemoteSyncConfigured()) pullRemoteAndMerge();
-    }, 12000);
+    const tickRemote = () => {
+      if (!isRemoteSyncConfigured() || document.visibilityState !== 'visible') return;
+      quickPullIfRemoteChanged();
+    };
+    const pollFastRemote = setInterval(tickRemote, 600);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tickRemote();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', tickRemote);
 
     const poll = setInterval(() => {
       setNotifications(getNotifications());
-    }, 5000);
+    }, 4000);
     const onStorage = () => setNotifications(getNotifications());
     window.addEventListener('storage', onStorage);
     return () => {
       cancelled = true;
       unsub();
       unsubRealtime();
-      clearInterval(pollRemote);
+      clearInterval(pollFastRemote);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', tickRemote);
       clearInterval(poll);
       window.removeEventListener('storage', onStorage);
     };

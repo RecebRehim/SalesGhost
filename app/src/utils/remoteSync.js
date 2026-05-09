@@ -17,6 +17,37 @@ export const WISHLIST_UPDATED_AT_KEY = 'ecommerce_wishlist_updated_at';
 let applyingRemote = false;
 let pushTimer = null;
 
+/** Latest `salesghost_sync.updated_at` we have merged; cheap polls skip full pull when unchanged. */
+let lastRemoteUpdatedAtRef = null;
+
+async function syncLastRemoteUpdatedAtRef() {
+  const supabase = getClient();
+  if (!supabase) return;
+  const { data } = await supabase
+    .from('salesghost_sync')
+    .select('updated_at')
+    .eq('account_id', SYNC_ACCOUNT_ID)
+    .maybeSingle();
+  if (data?.updated_at) lastRemoteUpdatedAtRef = data.updated_at;
+}
+
+/**
+ * Lightweight poll: only runs full merge when Supabase row `updated_at` changed (e.g. n8n POST to /api/chat-message).
+ * Keeps chat near real-time without merging every second.
+ */
+export const quickPullIfRemoteChanged = async () => {
+  const supabase = getClient();
+  if (!supabase || applyingRemote) return;
+  const { data, error } = await supabase
+    .from('salesghost_sync')
+    .select('updated_at')
+    .eq('account_id', SYNC_ACCOUNT_ID)
+    .maybeSingle();
+  if (error || !data?.updated_at) return;
+  if (data.updated_at === lastRemoteUpdatedAtRef) return;
+  await pullRemoteAndMerge();
+};
+
 const url = import.meta.env.VITE_SUPABASE_URL;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -149,6 +180,7 @@ export const flushRemotePush = async () => {
     pushTimer = null;
   }
   await pushToRemote();
+  await syncLastRemoteUpdatedAtRef();
 };
 
 /** Clears analytics, cart, wishlist, mock DB, stamps demoResetAt, overwrites Supabase row — prevents old data merging back. */
@@ -231,6 +263,7 @@ export const pullRemoteAndMerge = async () => {
   }
   if (!data) {
     await pushToRemote();
+    await syncLastRemoteUpdatedAtRef();
     broadcastSync();
     return { ok: true, merged: false, reason: 'no_remote_row' };
   }
@@ -350,6 +383,7 @@ export const pullRemoteAndMerge = async () => {
     }
 
     await pushToRemote();
+    await syncLastRemoteUpdatedAtRef();
     broadcastSync();
     return { ok: true, merged: true };
   } finally {
@@ -378,7 +412,7 @@ export const subscribeSalesghostSync = () => {
         realtimePullTimer = setTimeout(() => {
           realtimePullTimer = null;
           pullRemoteAndMerge();
-        }, 400);
+        }, 50);
       },
     )
     .subscribe();
