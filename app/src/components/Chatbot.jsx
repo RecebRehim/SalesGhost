@@ -12,7 +12,14 @@ export function Chatbot({ onRefresh }) {
   );
   const bottomRef = useRef(null);
   const seenN8nIdsRef = useRef(new Set());
+  /** Tracks n8n ids we've already played chime for — avoids double-fire from Strict Mode / duplicate sync events. */
+  const n8nAudioPlayedIdsRef = useRef(new Set());
   const didHydrateRef = useRef(false);
+
+  const playN8nChime = useCallback(() => {
+    const alertSound = new Audio('/audio/notification.mp3');
+    alertSound.play().catch(() => {});
+  }, []);
 
   const refresh = useCallback(() => {
     setItems(getNotifications().filter(isN8nMessage));
@@ -27,6 +34,7 @@ export function Chatbot({ onRefresh }) {
   useEffect(() => {
     const onClear = () => {
       seenN8nIdsRef.current = new Set();
+      n8nAudioPlayedIdsRef.current = new Set();
       didHydrateRef.current = false;
       refresh();
     };
@@ -37,23 +45,31 @@ export function Chatbot({ onRefresh }) {
   /** Auto-open when a new n8n message id appears (skip first hydration so we don't open on page load). */
   useEffect(() => {
     if (!didHydrateRef.current) {
-      items.forEach((msg) => seenN8nIdsRef.current.add(msg.id));
+      items.forEach((msg) => {
+        seenN8nIdsRef.current.add(msg.id);
+        n8nAudioPlayedIdsRef.current.add(msg.id);
+      });
       didHydrateRef.current = true;
       return;
     }
-    let hasNew = false;
+    const seen = seenN8nIdsRef.current;
+    let hasNewForUi = false;
+    const newcomerIds = [];
     for (const msg of items) {
-      if (!seenN8nIdsRef.current.has(msg.id)) {
-        seenN8nIdsRef.current.add(msg.id);
-        hasNew = true;
+      if (!seen.has(msg.id)) {
+        seen.add(msg.id);
+        hasNewForUi = true;
+      }
+      if (!n8nAudioPlayedIdsRef.current.has(msg.id)) {
+        newcomerIds.push(msg.id);
+        n8nAudioPlayedIdsRef.current.add(msg.id);
       }
     }
-    if (hasNew) {
-      setOpen(true);
-      const alertSound = new Audio('/audio/notification.mp3');
-      alertSound.play().catch(() => {});
-    }
-  }, [items]);
+    if (hasNewForUi) setOpen(true);
+    // One chime per new n8n id (deduped); guards duplicate effects / back-to-back syncs.
+    const uniqueNewcomers = [...new Set(newcomerIds)];
+    uniqueNewcomers.forEach(() => playN8nChime());
+  }, [items, playN8nChime]);
 
   useEffect(() => {
     if (open && bottomRef.current) {

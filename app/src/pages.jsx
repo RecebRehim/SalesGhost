@@ -412,15 +412,15 @@ export const NotificationsPage = ({ notifications, refreshNotifications }) => {
           className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white"
           onClick={() => {
             addNotification({
-              title: 'Test Notification Sound',
-              message: 'This is a test alert for website audio + visual notification.',
+              title: 'Test website notification',
+              message: 'Appears in the notifications list only (no sound — n8n chat uses chime separately).',
               channel: 'website',
               metadata: { source: 'audio-test' },
             });
             refreshNotifications();
           }}
         >
-          Send Test Notification (Sound)
+          Send Test Notification
         </button>
       </div>
 
