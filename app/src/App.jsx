@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
+import { Chatbot } from './components/Chatbot';
 import { Navbar, ConsentBanner } from './components/ui';
 import { AboutPage, AnalyticsPage, CartPage, CheckoutPage, HomePage, NotificationsPage, ProductDetailPage, ProductsPage, SuccessPage, WishlistPage } from './pages';
 import { getCart, saveCart } from './utils/cart';
@@ -55,7 +56,7 @@ function App() {
 
     const pollRemote = setInterval(() => {
       if (isRemoteSyncConfigured()) pullRemoteAndMerge();
-    }, 45000);
+    }, 30000);
 
     const poll = setInterval(() => {
       setNotifications(getNotifications());
@@ -168,6 +169,11 @@ function App() {
         <Route path="/about" element={<AboutPage />} />
       </Routes>
       <ConsentBanner status={consent} onChoice={(choice) => { setConsentStatus(choice); setConsent(choice); }} />
+      <Chatbot
+        onRefresh={() => {
+          setNotifications(getNotifications());
+        }}
+      />
     </div>
   );
 }
