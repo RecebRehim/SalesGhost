@@ -62,13 +62,20 @@ function App() {
 
     const tickRemote = () => {
       if (!isRemoteSyncConfigured() || document.visibilityState !== 'visible') return;
-      quickPullIfRemoteChanged();
+      void quickPullIfRemoteChanged();
     };
-    const pollFastRemote = setInterval(tickRemote, 600);
+    /** ~10 checks/sec when tab visible — catches API writes within ~100ms if Realtime is off */
+    const pollFastRemote = setInterval(tickRemote, 100);
     const onVisible = () => {
       if (document.visibilityState === 'visible') tickRemote();
     };
+    const onFocus = () => tickRemote();
+    const onPageShow = (e) => {
+      if (e.persisted) tickRemote();
+    };
     document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('pageshow', onPageShow);
     window.addEventListener('online', tickRemote);
 
     const poll = setInterval(() => {
@@ -82,6 +89,8 @@ function App() {
       unsubRealtime();
       clearInterval(pollFastRemote);
       document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('pageshow', onPageShow);
       window.removeEventListener('online', tickRemote);
       clearInterval(poll);
       window.removeEventListener('storage', onStorage);

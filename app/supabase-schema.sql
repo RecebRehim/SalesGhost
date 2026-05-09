@@ -19,7 +19,7 @@ create table if not exists public.salesghost_sync (
 
 alter table public.salesghost_sync enable row level security;
 
--- Realtime (optional): Dashboard → Database → Replication, or:
+-- Realtime (recommended for instant n8n chat): Dashboard → Database → Replication → enable salesghost_sync, or:
 -- alter publication supabase_realtime add table public.salesghost_sync;
 
 -- Demo-only: allow anonymous read/write for the single shared account (hackathon).

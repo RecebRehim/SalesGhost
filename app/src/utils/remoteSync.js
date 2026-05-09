@@ -20,6 +20,13 @@ let pushTimer = null;
 /** Latest `salesghost_sync.updated_at` we have merged; cheap polls skip full pull when unchanged. */
 let lastRemoteUpdatedAtRef = null;
 
+/** Normalize for comparison (Postgres may return slightly different ISO strings). */
+const updatedAtMs = (iso) => {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  return Number.isFinite(t) ? t : null;
+};
+
 async function syncLastRemoteUpdatedAtRef() {
   const supabase = getClient();
   if (!supabase) return;
@@ -44,7 +51,9 @@ export const quickPullIfRemoteChanged = async () => {
     .eq('account_id', SYNC_ACCOUNT_ID)
     .maybeSingle();
   if (error || !data?.updated_at) return;
-  if (data.updated_at === lastRemoteUpdatedAtRef) return;
+  const remoteMs = updatedAtMs(data.updated_at);
+  const refMs = updatedAtMs(lastRemoteUpdatedAtRef);
+  if (remoteMs !== null && refMs !== null && remoteMs === refMs) return;
   await pullRemoteAndMerge();
 };
 
@@ -57,7 +66,13 @@ export const isRemoteSyncConfigured = () =>
 let client = null;
 const getClient = () => {
   if (!isRemoteSyncConfigured()) return null;
-  if (!client) client = createClient(url, anonKey);
+  if (!client) {
+    client = createClient(url, anonKey, {
+      realtime: {
+        params: { eventsPerSecond: 50 },
+      },
+    });
+  }
   return client;
 };
 
@@ -250,26 +265,26 @@ const pushToRemote = async () => {
 export const pullRemoteAndMerge = async () => {
   const supabase = getClient();
   if (!supabase) return { ok: false, reason: 'not_configured' };
-
-  const { data, error } = await supabase
-    .from('salesghost_sync')
-    .select('*')
-    .eq('account_id', SYNC_ACCOUNT_ID)
-    .maybeSingle();
-
-  if (error) {
-    console.warn('[SalesGhost sync] pull failed', error.message);
-    return { ok: false, reason: error.message };
-  }
-  if (!data) {
-    await pushToRemote();
-    await syncLastRemoteUpdatedAtRef();
-    broadcastSync();
-    return { ok: true, merged: false, reason: 'no_remote_row' };
-  }
-
+  if (applyingRemote) return { ok: false, reason: 'busy' };
   applyingRemote = true;
   try {
+    const { data, error } = await supabase
+      .from('salesghost_sync')
+      .select('*')
+      .eq('account_id', SYNC_ACCOUNT_ID)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[SalesGhost sync] pull failed', error.message);
+      return { ok: false, reason: error.message };
+    }
+    if (!data) {
+      await pushToRemote();
+      await syncLastRemoteUpdatedAtRef();
+      broadcastSync();
+      return { ok: true, merged: false, reason: 'no_remote_row' };
+    }
+
     const localAnalytics = readJson(ANALYTICS_KEY, []);
     const remoteAnalytics = Array.isArray(data.analytics_events)
       ? data.analytics_events
@@ -391,9 +406,7 @@ export const pullRemoteAndMerge = async () => {
   }
 };
 
-let realtimePullTimer = null;
-
-/** Subscribe to Postgres changes on `salesghost_sync` for instant pull (enable Realtime + replica for this table in Supabase). */
+/** Subscribe to Postgres changes on `salesghost_sync` — fires as soon as n8n/API updates the row (enable Realtime on this table in Supabase). */
 export const subscribeSalesghostSync = () => {
   const supabase = getClient();
   if (!supabase) return () => {};
@@ -408,19 +421,11 @@ export const subscribeSalesghostSync = () => {
         filter: `account_id=eq.${SYNC_ACCOUNT_ID}`,
       },
       () => {
-        if (realtimePullTimer) clearTimeout(realtimePullTimer);
-        realtimePullTimer = setTimeout(() => {
-          realtimePullTimer = null;
-          pullRemoteAndMerge();
-        }, 50);
+        void pullRemoteAndMerge();
       },
     )
     .subscribe();
   return () => {
-    if (realtimePullTimer) {
-      clearTimeout(realtimePullTimer);
-      realtimePullTimer = null;
-    }
     supabase.removeChannel(channel);
   };
 };
