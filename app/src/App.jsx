@@ -147,8 +147,8 @@ function App() {
     <div>
       <Navbar cartCount={cartCount} wishlistCount={wishlistCount} notificationsCount={unreadNotificationsCount} />
       <Routes>
-        <Route path="/" element={<HomePage onAddToCart={addToCart} />} />
-        <Route path="/products" element={<ProductsPage onAddToCart={addToCart} />} />
+        <Route path="/" element={<HomePage onAddToCart={addToCart} onAddToWishlist={addWishlist} />} />
+        <Route path="/products" element={<ProductsPage onAddToCart={addToCart} onAddToWishlist={addWishlist} />} />
         <Route path="/products/:productId" element={<ProductDetailPage onAddToCart={addToCart} onWishlist={addWishlist} onBuyNow={buyNow} />} />
         <Route path="/cart" element={<CartPage cart={cart} updateQty={updateQty} removeItem={removeItem} />} />
         <Route path="/wishlist" element={<WishlistPage wishlist={wishlist} removeWishlistItem={removeWishlistItem} moveToCart={moveToCart} />} />

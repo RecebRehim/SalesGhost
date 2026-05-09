@@ -142,6 +142,47 @@ export const scheduleRemotePush = () => {
   }, 900);
 };
 
+/** Cancels debounced push and uploads immediately (use after destructive local resets). */
+export const flushRemotePush = async () => {
+  if (pushTimer) {
+    clearTimeout(pushTimer);
+    pushTimer = null;
+  }
+  await pushToRemote();
+};
+
+/** Clears analytics, cart, wishlist, mock DB, stamps demoResetAt, overwrites Supabase row — prevents old data merging back. */
+export const resetSyncedDemoDataLocal = async () => {
+  const now = new Date().toISOString();
+  safeWrite(ANALYTICS_KEY, []);
+  try {
+    localStorage.removeItem(CART_KEY);
+    localStorage.removeItem(WISHLIST_KEY);
+    localStorage.removeItem(CART_UPDATED_AT_KEY);
+    localStorage.removeItem(WISHLIST_UPDATED_AT_KEY);
+  } catch {
+    /* ignore */
+  }
+  const freshDb = {
+    users: [
+      {
+        userId: SYNC_ACCOUNT_ID,
+        email: 'recebyegen05@gmail.com',
+        fullName: 'SalesGhost Demo User',
+      },
+    ],
+    events: [],
+    sessions: [],
+    notifications: [],
+    notificationsClearedAt: null,
+    demoResetAt: now,
+    updatedAt: now,
+  };
+  safeWrite(DB_KEY, freshDb);
+  await flushRemotePush();
+  broadcastSync();
+};
+
 const pushToRemote = async () => {
   const supabase = getClient();
   if (!supabase) return;
@@ -151,6 +192,8 @@ const pushToRemote = async () => {
     events: [],
     sessions: [],
     notifications: [],
+    notificationsClearedAt: null,
+    demoResetAt: null,
     updatedAt: new Date().toISOString(),
   };
   const nowIso = new Date().toISOString();
@@ -198,39 +241,72 @@ export const pullRemoteAndMerge = async () => {
     const remoteAnalytics = Array.isArray(data.analytics_events)
       ? data.analytics_events
       : [];
-    safeWrite(ANALYTICS_KEY, mergeEventsById(localAnalytics, remoteAnalytics));
 
     const localDb = readJson(DB_KEY, {});
     const remoteDb = data.mock_database || {};
-    const clearedAt = maxIso(
-      localDb.notificationsClearedAt,
-      remoteDb.notificationsClearedAt,
-    );
-    const mergedNotifications = mergeNotifications(
-      localDb.notifications || [],
-      remoteDb.notifications || [],
-    ).filter((n) => {
-      if (!clearedAt) return true;
-      return new Date(n.createdAt) >= new Date(clearedAt);
-    });
-    const mergedDb = {
-      users:
-        localDb.users?.length
-          ? localDb.users
-          : remoteDb.users || [
-              {
-                userId: SYNC_ACCOUNT_ID,
-                email: 'recebyegen05@gmail.com',
-                fullName: 'SalesGhost Demo User',
-              },
-            ],
-      events: mergeEventsById(localDb.events || [], remoteDb.events || []),
-      sessions: mergeSessions(localDb.sessions || [], remoteDb.sessions || []),
-      notifications: mergedNotifications,
-      notificationsClearedAt: clearedAt,
-      updatedAt: new Date().toISOString(),
-    };
-    safeWrite(DB_KEY, mergedDb);
+    const lReset = parseTs(localDb.demoResetAt);
+    const rReset = parseTs(remoteDb.demoResetAt);
+
+    const defaultUsers = () => [
+      {
+        userId: SYNC_ACCOUNT_ID,
+        email: 'recebyegen05@gmail.com',
+        fullName: 'SalesGhost Demo User',
+      },
+    ];
+
+    if (lReset > rReset) {
+      safeWrite(ANALYTICS_KEY, localAnalytics);
+      const mergedDb = {
+        users: localDb.users?.length ? localDb.users : remoteDb.users || defaultUsers(),
+        events: localDb.events || [],
+        sessions: localDb.sessions || [],
+        notifications: localDb.notifications || [],
+        notificationsClearedAt: localDb.notificationsClearedAt ?? null,
+        demoResetAt: localDb.demoResetAt ?? null,
+        updatedAt: new Date().toISOString(),
+      };
+      safeWrite(DB_KEY, mergedDb);
+    } else if (rReset > lReset) {
+      safeWrite(ANALYTICS_KEY, remoteAnalytics);
+      const mergedDb = {
+        users: remoteDb.users?.length ? remoteDb.users : localDb.users || defaultUsers(),
+        events: remoteDb.events || [],
+        sessions: remoteDb.sessions || [],
+        notifications: remoteDb.notifications || [],
+        notificationsClearedAt: remoteDb.notificationsClearedAt ?? null,
+        demoResetAt: remoteDb.demoResetAt ?? null,
+        updatedAt: new Date().toISOString(),
+      };
+      safeWrite(DB_KEY, mergedDb);
+    } else {
+      safeWrite(ANALYTICS_KEY, mergeEventsById(localAnalytics, remoteAnalytics));
+
+      const clearedAt = maxIso(
+        localDb.notificationsClearedAt,
+        remoteDb.notificationsClearedAt,
+      );
+      const mergedNotifications = mergeNotifications(
+        localDb.notifications || [],
+        remoteDb.notifications || [],
+      ).filter((n) => {
+        if (!clearedAt) return true;
+        return new Date(n.createdAt) >= new Date(clearedAt);
+      });
+      const mergedDb = {
+        users:
+          localDb.users?.length
+            ? localDb.users
+            : remoteDb.users || defaultUsers(),
+        events: mergeEventsById(localDb.events || [], remoteDb.events || []),
+        sessions: mergeSessions(localDb.sessions || [], remoteDb.sessions || []),
+        notifications: mergedNotifications,
+        notificationsClearedAt: clearedAt,
+        demoResetAt: maxIso(localDb.demoResetAt, remoteDb.demoResetAt),
+        updatedAt: new Date().toISOString(),
+      };
+      safeWrite(DB_KEY, mergedDb);
+    }
 
     const remoteCart = Array.isArray(data.cart) ? data.cart : [];
     let localCartAt = localStorage.getItem(CART_UPDATED_AT_KEY);

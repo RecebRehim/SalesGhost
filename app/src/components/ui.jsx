@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 
 const fallbackImage = 'https://placehold.co/900x700/e2e8f0/334155?text=Tech+Product';
 
@@ -27,6 +27,19 @@ export const EmptyState = ({ title, description }) => (
     <p className="mt-2 text-sm text-slate-600">{description}</p>
   </div>
 );
+
+export const PageBack = ({ className = '' }) => {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => navigate(-1)}
+      className={`mb-4 text-sm font-semibold text-slate-600 hover:text-brand-700 ${className}`}
+    >
+      ← Go back
+    </button>
+  );
+};
 
 export const Navbar = ({ cartCount, wishlistCount, notificationsCount }) => {
   const [open, setOpen] = useState(false);
@@ -97,32 +110,57 @@ export const SearchBar = ({ query, setQuery }) => (
   />
 );
 
-export const ProductCard = ({ product, onAddToCart }) => (
+export const ProductCard = ({ product, onAddToCart, onAddToWishlist }) => (
   <article className="overflow-hidden rounded-2xl border bg-white shadow-card transition hover:-translate-y-1">
-    <img
-      src={product.images[0]}
-      alt={product.name}
-      className="h-44 w-full object-cover"
-      onError={(e) => { e.currentTarget.src = fallbackImage; }}
-    />
-    <div className="space-y-2 p-4">
-      <div className="flex flex-wrap gap-1">{product.tags.slice(0, 2).map((tag) => <ProductBadge key={tag} label={tag} />)}</div>
-      <h3 className="font-semibold">{product.name}</h3>
-      <p className="text-sm text-slate-500">{product.brand} • {product.category}</p>
-      <p className="text-sm text-slate-600">{product.description}</p>
-      <RatingStars rating={product.rating} />
-      <div className="flex items-center gap-2">
-        <span className="text-lg font-bold text-brand-700">${product.discountPrice}</span>
-        <span className="text-sm text-slate-400 line-through">${product.price}</span>
+    <Link
+      to={`/products/${product.id}`}
+      className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+    >
+      <img
+        src={product.images[0]}
+        alt={product.name}
+        className="h-44 w-full object-cover"
+        onError={(e) => { e.currentTarget.src = fallbackImage; }}
+      />
+      <div className="space-y-2 p-4">
+        <div className="flex flex-wrap gap-1">{product.tags.slice(0, 2).map((tag) => <ProductBadge key={tag} label={tag} />)}</div>
+        <h3 className="font-semibold text-slate-900">{product.name}</h3>
+        <p className="text-sm text-slate-500">{product.brand} • {product.category}</p>
+        <p className="text-sm text-slate-600">{product.description}</p>
+        <RatingStars rating={product.rating} />
+        <div className="flex items-center gap-2">
+          <span className="text-lg font-bold text-brand-700">${product.discountPrice}</span>
+          <span className="text-sm text-slate-400 line-through">${product.price}</span>
+        </div>
+        <p className={`text-xs font-semibold ${product.stock < 10 ? 'text-orange-600' : 'text-emerald-600'}`}>
+          {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
+        </p>
+        <p className="text-xs font-medium text-brand-600">View product →</p>
       </div>
-      <p className={`text-xs font-semibold ${product.stock < 10 ? 'text-orange-600' : 'text-emerald-600'}`}>
-        {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
-      </p>
-      <div className="grid grid-cols-2 gap-2">
-        <button onClick={() => onAddToCart(product)} className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700">Add to Cart</button>
-        <Link to={`/products/${product.id}`} className="rounded-lg border px-3 py-2 text-center text-sm font-semibold hover:bg-slate-50">View Details</Link>
-      </div>
-      <Link to="/cart" className="block rounded-lg border px-3 py-2 text-center text-sm font-semibold hover:bg-slate-50">View Cart</Link>
+    </Link>
+    <div className="grid grid-cols-2 gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-3">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onAddToCart(product);
+        }}
+        className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700"
+      >
+        Add to Cart
+      </button>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onAddToWishlist(product);
+        }}
+        className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+      >
+        Add to Wishlist
+      </button>
     </div>
   </article>
 );
@@ -178,9 +216,11 @@ export const EventTable = ({ events }) => (
   </div>
 );
 
-export const ProductGrid = ({ products, onAddToCart }) => (
+export const ProductGrid = ({ products, onAddToCart, onAddToWishlist }) => (
   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-    {products.map((product) => <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} />)}
+    {products.map((product) => (
+      <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} onAddToWishlist={onAddToWishlist} />
+    ))}
   </div>
 );
 

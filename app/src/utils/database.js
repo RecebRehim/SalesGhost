@@ -32,6 +32,8 @@ const defaultDb = () => ({
   notifications: [],
   /** When set, notifications with older createdAt are dropped on cloud merge (after user clears history). */
   notificationsClearedAt: null,
+  /** When set, wins over older cloud rows so reset demo data is not merged back from Supabase. */
+  demoResetAt: null,
   updatedAt: new Date().toISOString(),
 });
 
@@ -44,6 +46,7 @@ export const getDb = () => {
   if (!db.sessions) db.sessions = [];
   if (!db.notifications) db.notifications = [];
   if (!('notificationsClearedAt' in db)) db.notificationsClearedAt = null;
+  if (!('demoResetAt' in db)) db.demoResetAt = null;
   return db;
 };
 

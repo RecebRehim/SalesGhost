@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { brands, categories, products } from './data/products';
 import { trackEvent, getEvents, computeAnalytics, clearEvents, generateDemoEvents } from './utils/analytics';
-import { CategoryCard, EmptyState, EventTable, ProductCard, ProductSort, RatingStars, SearchBar, ProductBadge } from './components/ui';
+import { CategoryCard, EmptyState, EventTable, PageBack, ProductCard, ProductSort, RatingStars, SearchBar, ProductBadge } from './components/ui';
 import {
   addNotification,
   clearAllNotifications,
@@ -15,17 +15,15 @@ import {
   setN8nWebhookUrl,
 } from './utils/database';
 import {
-  CART_UPDATED_AT_KEY,
-  WISHLIST_UPDATED_AT_KEY,
   isRemoteSyncConfigured,
   onRemoteSyncReady,
   pullRemoteAndMerge,
-  scheduleRemotePush,
+  resetSyncedDemoDataLocal,
 } from './utils/remoteSync';
 
 const currency = (amount) => `$${amount.toFixed(2)}`;
 
-export const HomePage = ({ onAddToCart }) => {
+export const HomePage = ({ onAddToCart, onAddToWishlist }) => {
   useEffect(() => {
     trackEvent('PAGE_VIEW', { page: '/' });
   }, []);
@@ -34,6 +32,7 @@ export const HomePage = ({ onAddToCart }) => {
   const deals = [...products].sort((a, b) => (b.price - b.discountPrice) - (a.price - a.discountPrice)).slice(0, 4);
   return (
     <div className="mx-auto max-w-7xl space-y-8 px-4 py-6 sm:space-y-10 sm:py-8">
+      <PageBack />
       <section className="rounded-3xl bg-gradient-to-r from-brand-900 to-brand-600 p-5 text-white sm:p-8">
         <p className="text-sm uppercase tracking-widest text-brand-100">SalesGhost Hackathon Demo</p>
         <h1 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">Tech products with built-in behavior analytics</h1>
@@ -46,13 +45,13 @@ export const HomePage = ({ onAddToCart }) => {
         ['Trending Products', trending],
         ['Deals', deals],
       ].map(([title, list]) => (
-        <section key={title}><h2 className="mb-4 text-2xl font-bold">{title}</h2><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{list.map((product) => <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} />)}</div></section>
+        <section key={title}><h2 className="mb-4 text-2xl font-bold">{title}</h2><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{list.map((product) => <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} onAddToWishlist={onAddToWishlist} />)}</div></section>
       ))}
     </div>
   );
 };
 
-export const ProductsPage = ({ onAddToCart }) => {
+export const ProductsPage = ({ onAddToCart, onAddToWishlist }) => {
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('category') || 'all');
@@ -168,7 +167,9 @@ export const ProductsPage = ({ onAddToCart }) => {
   }, [discountOnly, inStockOnly, maxPrice, minRating, query, selectedBrand, selectedCategory, sort, searchMode, minSearchScore, searchIn]);
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-6 px-4 py-6 lg:grid-cols-[300px_1fr] lg:py-8">
+    <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 lg:py-8">
+      <PageBack />
+      <div className="grid gap-6 lg:grid-cols-[300px_1fr]">
       <aside className="h-fit space-y-3 rounded-xl border bg-white p-4">
         <h2 className="text-lg font-bold">Filters</h2>
         <div className="rounded-lg border border-brand-200 bg-brand-50 p-3">
@@ -214,9 +215,10 @@ export const ProductsPage = ({ onAddToCart }) => {
           <ProductSort value={sort} onChange={setSort} />
         </div>
         {filtered.length ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map((product) => <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} />)}</div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map((product) => <ProductCard key={product.id} product={product} onAddToCart={onAddToCart} onAddToWishlist={onAddToWishlist} />)}</div>
         ) : <EmptyState title="No products found" description="Try widening your filters, lowering minimum rating, or changing keywords." />}
       </section>
+      </div>
     </div>
   );
 };
@@ -233,12 +235,14 @@ export const ProductDetailPage = ({ onAddToCart, onWishlist, onBuyNow }) => {
     trackEvent('PAGE_VIEW', { page: `/products/${product.id}` });
     trackEvent('PRODUCT_VIEW', { productId: product.id, productName: product.name, category: product.category });
   }, [product]);
-  if (!product) return <div className="mx-auto max-w-7xl px-4 py-8"><EmptyState title="Product not found" description="The selected product is missing." /></div>;
+  if (!product) return <div className="mx-auto max-w-7xl px-4 py-8"><PageBack /><EmptyState title="Product not found" description="The selected product is missing." /></div>;
 
   const similar = products.filter((item) => item.category === product.category && item.id !== product.id).slice(0, 4);
 
   return (
-    <div className="mx-auto grid max-w-7xl gap-8 px-4 py-6 lg:grid-cols-2 lg:py-8">
+    <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 lg:py-8">
+      <PageBack />
+      <div className="grid gap-8 lg:grid-cols-2">
       <section className="space-y-3">
         <img src={product.images[selectedImage]} onError={(e) => { e.currentTarget.src = 'https://placehold.co/900x700/e2e8f0/334155?text=Tech+Product'; }} className="h-72 w-full rounded-2xl object-cover sm:h-96" alt={product.name} />
         <div className="grid grid-cols-3 gap-3">{product.images.map((image, idx) => <button key={image} onClick={() => { setSelectedImage(idx); trackEvent('IMAGE_GALLERY_CLICKED', { productId: product.id, productName: product.name, metadata: { imageIndex: idx } }); }} className="overflow-hidden rounded-lg border"><img src={image} className="h-20 w-full object-cover" alt={`${product.name}-${idx}`} /></button>)}</div>
@@ -261,6 +265,7 @@ export const ProductDetailPage = ({ onAddToCart, onWishlist, onBuyNow }) => {
         {showReviews && <p className="rounded-lg bg-slate-100 p-3 text-sm">Rated {product.rating} by {product.reviewCount} reviewers. Customers praise value, performance, and reliability.</p>}
         <div className="space-y-2"><h3 className="font-bold">Similar Products</h3><div className="grid gap-3 md:grid-cols-2">{similar.map((item) => <button key={item.id} onClick={() => { trackEvent('SIMILAR_PRODUCT_CLICKED', { productId: item.id, productName: item.name, category: item.category, metadata: { from: product.id } }); navigate(`/products/${item.id}`); }} className="rounded-lg border bg-white p-3 text-left hover:border-brand-500">{item.name}</button>)}</div></div>
       </section>
+      </div>
     </div>
   );
 };
@@ -272,9 +277,10 @@ export const CartPage = ({ cart, updateQty, removeItem }) => {
   const subtotal = cart.reduce((sum, item) => sum + item.discountPrice * item.quantity, 0);
   const tax = subtotal * 0.08;
   const shipping = subtotal > 0 ? 14.99 : 0;
-  if (!cart.length) return <div className="mx-auto max-w-5xl px-4 py-8"><EmptyState title="Your cart is empty" description="Add products to continue to checkout." /></div>;
+  if (!cart.length) return <div className="mx-auto max-w-5xl px-4 py-8"><PageBack /><EmptyState title="Your cart is empty" description="Add products to continue to checkout." /></div>;
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-8">
+      <PageBack />
       {cart.map((item) => (
         <div key={item.id} className="grid items-center gap-3 rounded-xl border bg-white p-4 md:grid-cols-[1fr_auto_auto_auto]">
           <div><p className="font-semibold">{item.name}</p><p className="text-sm text-slate-500">{item.brand}</p></div>
@@ -302,6 +308,7 @@ export const WishlistPage = ({ wishlist, removeWishlistItem, moveToCart }) => {
   if (!wishlist.length) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-8">
+        <PageBack />
         <EmptyState title="Your wishlist is empty" description="Save products here, then review your wishlist and move items to cart." />
       </div>
     );
@@ -309,6 +316,7 @@ export const WishlistPage = ({ wishlist, removeWishlistItem, moveToCart }) => {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-8">
+      <PageBack />
       <h1 className="text-2xl font-bold">Review Wishlist ({wishlist.length})</h1>
       {wishlist.map((item) => (
         <div key={item.id} className="grid items-center gap-3 rounded-xl border bg-white p-4 md:grid-cols-[1fr_auto_auto]">
@@ -350,6 +358,7 @@ export const NotificationsPage = ({ notifications, refreshNotifications }) => {
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 px-4 py-8">
+      <PageBack />
       <h1 className="text-2xl font-bold">Notifications ({unread} unread)</h1>
       <div className={`rounded-xl border p-4 ${isRemoteSyncConfigured() ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
         <p className="text-sm font-semibold">{isRemoteSyncConfigured() ? 'Cloud sync enabled (Supabase)' : 'Cloud sync not configured'}</p>
@@ -466,6 +475,7 @@ export const CheckoutPage = ({ cart, clearCart }) => {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
+      <PageBack />
       <form onSubmit={submit} className="space-y-4 rounded-xl border bg-white p-4 sm:p-5">
         <h1 className="text-2xl font-bold">Mock Checkout</h1>
         {['Name', 'Email', 'Address'].map((field) => <input key={field} required placeholder={field} className="w-full rounded-lg border px-3 py-2" />)}
@@ -478,6 +488,9 @@ export const CheckoutPage = ({ cart, clearCart }) => {
 
 export const SuccessPage = () => (
   <div className="mx-auto max-w-xl px-4 py-16 text-center">
+    <div className="mb-6 text-left">
+      <PageBack />
+    </div>
     <h1 className="text-3xl font-black text-emerald-600">Order placed successfully!</h1>
     <p className="mt-3 text-slate-600">This was a mock purchase for demo analytics. No payment was processed.</p>
     <Link to="/products" className="mt-6 inline-block rounded-lg bg-brand-600 px-4 py-2 text-white">Continue Shopping</Link>
@@ -510,7 +523,26 @@ export const AnalyticsPage = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 lg:py-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"><h1 className="text-2xl font-bold">Analytics Dashboard</h1><div className="flex flex-wrap gap-2"><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => { generateDemoEvents(products); refresh(); }}>Demo Mode</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={refresh}>Refresh</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={exportJson}>Export JSON</button><button className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); refresh(); }}>Clear Analytics</button><button className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); localStorage.removeItem('ecommerce_cart_data'); localStorage.removeItem('ecommerce_wishlist_data'); localStorage.removeItem(CART_UPDATED_AT_KEY); localStorage.removeItem(WISHLIST_UPDATED_AT_KEY); localStorage.removeItem('ecommerce_mock_database'); scheduleRemotePush(); refresh(); }}>Reset Demo Data</button></div></div>
+      <PageBack />
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+        <h1 className="text-2xl font-bold">Analytics Dashboard</h1>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={() => { generateDemoEvents(products); refresh(); }}>Demo Mode</button>
+          <button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={refresh}>Refresh</button>
+          <button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={exportJson}>Export JSON</button>
+          <button type="button" className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); refresh(); }}>Clear Analytics</button>
+          <button
+            type="button"
+            className="rounded-lg border px-3 py-2 text-sm text-rose-700"
+            onClick={async () => {
+              await resetSyncedDemoDataLocal();
+              refresh();
+            }}
+          >
+            Reset Demo Data
+          </button>
+        </div>
+      </div>
       <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-5">
         <MetricCard label="Total Events" value={stats.totalEvents} />
         <MetricCard label="Product Views" value={stats.totalProductViews} />
@@ -546,6 +578,7 @@ export const AnalyticsPage = () => {
 
 export const AboutPage = () => (
   <div className="mx-auto max-w-3xl space-y-4 px-4 py-8">
+    <PageBack />
     <h1 className="text-3xl font-black">About This Demo</h1>
     <p>This ecommerce site is intentionally built for hackathon presentations focused on product browsing and user-behavior analytics.</p>
     <p>Behavior events and cart data are cached in your browser. With Supabase env vars configured, the same default account syncs to the cloud so other devices and n8n workflows can use one shared dataset.</p>
