@@ -52,15 +52,6 @@ export function Chatbot({ onRefresh }) {
   }, [items]);
 
   useEffect(() => {
-    if (!open || !isRemoteSyncConfigured()) return undefined;
-    const id = setInterval(async () => {
-      await pullRemoteAndMerge();
-      refresh();
-    }, 8000);
-    return () => clearInterval(id);
-  }, [open, refresh]);
-
-  useEffect(() => {
     if (open && bottomRef.current) {
       bottomRef.current.scrollIntoView({ behavior: 'smooth' });
     }

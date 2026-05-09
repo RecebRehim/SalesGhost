@@ -17,9 +17,7 @@ function App() {
   const [cart, setCart] = useState(getCart());
   const [wishlist, setWishlist] = useState(getWishlist());
   const [notifications, setNotifications] = useState(getNotifications());
-  const [showNotificationToast, setShowNotificationToast] = useState(false);
   const [consent, setConsent] = useState(getConsentStatus());
-  const prevUnreadRef = useRef(notifications.filter((item) => !item.read).length);
   const closeTrackedRef = useRef(false);
   const cartCount = useMemo(() => cart.reduce((sum, item) => sum + item.quantity, 0), [cart]);
   const wishlistCount = wishlist.length;
@@ -60,7 +58,7 @@ function App() {
 
     const pollRemote = setInterval(() => {
       if (isRemoteSyncConfigured()) pullRemoteAndMerge();
-    }, 30000);
+    }, 5000);
 
     const poll = setInterval(() => {
       setNotifications(getNotifications());
@@ -75,16 +73,6 @@ function App() {
       window.removeEventListener('storage', onStorage);
     };
   }, []);
-
-  useEffect(() => {
-    if (unreadNotificationsCount > prevUnreadRef.current) {
-      setShowNotificationToast(true);
-      const alertSound = new Audio('/audio/notification.mp3');
-      alertSound.play().catch(() => {});
-      setTimeout(() => setShowNotificationToast(false), 4000);
-    }
-    prevUnreadRef.current = unreadNotificationsCount;
-  }, [unreadNotificationsCount]);
 
   useEffect(() => {
     const closeHandler = () => {
@@ -154,12 +142,6 @@ function App() {
   return (
     <div>
       <Navbar cartCount={cartCount} wishlistCount={wishlistCount} notificationsCount={unreadNotificationsCount} />
-      {showNotificationToast && (
-        <div className="fixed right-4 top-20 z-50 rounded-lg border border-brand-200 bg-white px-4 py-3 text-sm shadow-lg">
-          <p className="font-semibold text-brand-700">New notification from SalesGhost</p>
-          <p className="text-slate-600">Open Notifications to review the n8n message.</p>
-        </div>
-      )}
       <Routes>
         <Route path="/" element={<HomePage onAddToCart={addToCart} />} />
         <Route path="/products" element={<ProductsPage onAddToCart={addToCart} />} />
