@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Route, Routes } from 'react-router-dom';
 import { Chatbot } from './components/Chatbot';
 import { Navbar, ConsentBanner } from './components/ui';
@@ -28,6 +28,10 @@ function App() {
   const refreshNotifications = () => {
     setNotifications(getNotifications());
   };
+
+  const refreshNotificationsStable = useCallback(() => {
+    setNotifications(getNotifications());
+  }, []);
 
   useEffect(() => {
     saveCart(cart);
@@ -169,11 +173,7 @@ function App() {
         <Route path="/about" element={<AboutPage />} />
       </Routes>
       <ConsentBanner status={consent} onChoice={(choice) => { setConsentStatus(choice); setConsent(choice); }} />
-      <Chatbot
-        onRefresh={() => {
-          setNotifications(getNotifications());
-        }}
-      />
+      <Chatbot onRefresh={refreshNotificationsStable} />
     </div>
   );
 }

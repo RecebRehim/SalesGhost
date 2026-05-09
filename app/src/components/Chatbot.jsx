@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { getNotifications } from '../utils/database';
 import { isRemoteSyncConfigured, pullRemoteAndMerge } from '../utils/remoteSync';
 
@@ -11,16 +11,35 @@ export function Chatbot({ onRefresh }) {
     getNotifications().filter(isN8nMessage),
   );
   const bottomRef = useRef(null);
+  const seenN8nIdsRef = useRef(new Set());
+  const didHydrateRef = useRef(false);
 
-  const refresh = () => {
+  const refresh = useCallback(() => {
     setItems(getNotifications().filter(isN8nMessage));
     onRefresh?.();
-  };
+  }, [onRefresh]);
 
   useEffect(() => {
     window.addEventListener('salesghost-sync', refresh);
     return () => window.removeEventListener('salesghost-sync', refresh);
-  }, []);
+  }, [refresh]);
+
+  /** Auto-open when a new n8n message id appears (skip first hydration so we don't open on page load). */
+  useEffect(() => {
+    if (!didHydrateRef.current) {
+      items.forEach((msg) => seenN8nIdsRef.current.add(msg.id));
+      didHydrateRef.current = true;
+      return;
+    }
+    let hasNew = false;
+    for (const msg of items) {
+      if (!seenN8nIdsRef.current.has(msg.id)) {
+        seenN8nIdsRef.current.add(msg.id);
+        hasNew = true;
+      }
+    }
+    if (hasNew) setOpen(true);
+  }, [items]);
 
   useEffect(() => {
     if (!open || !isRemoteSyncConfigured()) return undefined;
