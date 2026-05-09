@@ -3,6 +3,22 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { brands, categories, products } from './data/products';
 import { trackEvent, getEvents, computeAnalytics, clearEvents, generateDemoEvents } from './utils/analytics';
 import { CategoryCard, EmptyState, EventTable, ProductCard, ProductSort, RatingStars, SearchBar, ProductBadge } from './components/ui';
+import {
+  addNotification,
+  getDb,
+  getHardcodedUser,
+  getN8nWebhookUrl,
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  setN8nWebhookUrl,
+} from './utils/database';
+import {
+  isRemoteSyncConfigured,
+  onRemoteSyncReady,
+  pullRemoteAndMerge,
+  scheduleRemotePush,
+} from './utils/remoteSync';
 
 const currency = (amount) => `$${amount.toFixed(2)}`;
 
@@ -305,6 +321,120 @@ export const WishlistPage = ({ wishlist, removeWishlistItem, moveToCart }) => {
   );
 };
 
+export const NotificationsPage = ({ notifications, refreshNotifications }) => {
+  const [webhookUrl, setWebhookUrlState] = useState(getN8nWebhookUrl());
+  const [dbSummary, setDbSummary] = useState(() => getDb());
+  const [syncStatus, setSyncStatus] = useState('');
+  const unread = notifications.filter((item) => !item.read).length;
+  const hardcodedUser = getHardcodedUser();
+
+  useEffect(() => {
+    trackEvent('PAGE_VIEW', { page: '/notifications' });
+  }, []);
+
+  useEffect(() => {
+    const unsub = onRemoteSyncReady(() => {
+      setDbSummary(getDb());
+      refreshNotifications();
+    });
+    return unsub;
+  }, [refreshNotifications]);
+
+  const saveWebhook = () => {
+    setN8nWebhookUrl(webhookUrl.trim());
+    refreshNotifications();
+  };
+
+  return (
+    <div className="mx-auto max-w-5xl space-y-5 px-4 py-8">
+      <h1 className="text-2xl font-bold">Notifications ({unread} unread)</h1>
+      <div className={`rounded-xl border p-4 ${isRemoteSyncConfigured() ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+        <p className="text-sm font-semibold">{isRemoteSyncConfigured() ? 'Cloud sync enabled (Supabase)' : 'Cloud sync not configured'}</p>
+        <p className="mt-1 text-sm text-slate-700">
+          {isRemoteSyncConfigured()
+            ? 'Analytics and mock DB sync to Supabase so n8n and other devices see the same default account data.'
+            : 'Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY (see app/.env.example and app/supabase-schema.sql).'}
+        </p>
+        {syncStatus && <p className="mt-2 text-xs text-slate-600">{syncStatus}</p>}
+        <button
+          type="button"
+          className="mt-3 rounded-lg border bg-white px-3 py-2 text-sm font-semibold"
+          onClick={async () => {
+            const result = await pullRemoteAndMerge();
+            setSyncStatus(JSON.stringify(result));
+            setDbSummary(getDb());
+            refreshNotifications();
+          }}
+        >
+          Pull latest from cloud now
+        </button>
+      </div>
+      <div className="rounded-xl border bg-white p-4">
+        <p className="text-sm text-slate-600">Hardcoded user email for n8n outreach</p>
+        <p className="font-semibold">{hardcodedUser.email}</p>
+        <div className="mt-3 space-y-2">
+          <label className="block text-sm font-semibold">n8n webhook URL (optional)</label>
+          <input
+            value={webhookUrl}
+            onChange={(event) => setWebhookUrlState(event.target.value)}
+            placeholder="https://your-n8n-domain/webhook/salesghost-events"
+            className="w-full rounded-lg border px-3 py-2 text-sm"
+          />
+          <button className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white" onClick={saveWebhook}>Save n8n Endpoint</button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="rounded-xl border bg-white p-4"><p className="text-sm text-slate-500">DB Events</p><p className="text-2xl font-black">{dbSummary.events.length}</p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-sm text-slate-500">DB Sessions</p><p className="text-2xl font-black">{dbSummary.sessions.length}</p></div>
+        <div className="rounded-xl border bg-white p-4"><p className="text-sm text-slate-500">DB Notifications</p><p className="text-2xl font-black">{dbSummary.notifications.length}</p></div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button className="rounded-lg border px-3 py-2 text-sm font-semibold" onClick={() => { markAllNotificationsRead(); refreshNotifications(); }}>Mark All as Read</button>
+        <button className="rounded-lg border px-3 py-2 text-sm font-semibold" onClick={() => { addNotification({ title: 'Demo n8n Alert', message: 'We detected high intent behavior. Follow up with personalized offer.', channel: 'website', metadata: { source: 'manual-demo' } }); refreshNotifications(); }}>Create Demo Notification</button>
+        <button
+          className="rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white"
+          onClick={() => {
+            addNotification({
+              title: 'Test Notification Sound',
+              message: 'This is a test alert for website audio + visual notification.',
+              channel: 'website',
+              metadata: { source: 'audio-test' },
+            });
+            refreshNotifications();
+          }}
+        >
+          Send Test Notification (Sound)
+        </button>
+      </div>
+
+      {!notifications.length ? (
+        <EmptyState title="No notifications yet" description="n8n can push engagement messages here for the website user." />
+      ) : (
+        <div className="space-y-3">
+          {notifications.map((item) => (
+            <article key={item.id} className={`rounded-xl border p-4 ${item.read ? 'bg-white' : 'bg-brand-50/70 border-brand-200'}`}>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-semibold">{item.title}</p>
+                  <p className="text-sm text-slate-600">{item.message}</p>
+                  <p className="mt-1 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString()} • via {item.channel}</p>
+                </div>
+                {!item.read && (
+                  <button className="rounded-lg border px-2 py-1 text-xs font-semibold" onClick={() => { markNotificationRead(item.id); refreshNotifications(); }}>
+                    Mark as read
+                  </button>
+                )}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const CheckoutPage = ({ cart, clearCart }) => {
   const navigate = useNavigate();
   const [completed, setCompleted] = useState(false);
@@ -346,6 +476,10 @@ export const AnalyticsPage = () => {
   useEffect(() => {
     trackEvent('PAGE_VIEW', { page: '/analytics' });
   }, []);
+  useEffect(() => {
+    const unsub = onRemoteSyncReady(() => setEvents(getEvents()));
+    return unsub;
+  }, []);
   const stats = useMemo(() => computeAnalytics(events), [events]);
 
   const refresh = () => setEvents(getEvents());
@@ -361,7 +495,7 @@ export const AnalyticsPage = () => {
 
   return (
     <div className="mx-auto max-w-7xl space-y-5 px-4 py-6 lg:py-8">
-      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"><h1 className="text-2xl font-bold">Analytics Dashboard</h1><div className="flex flex-wrap gap-2"><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => { generateDemoEvents(products); refresh(); }}>Demo Mode</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={refresh}>Refresh</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={exportJson}>Export JSON</button><button className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); refresh(); }}>Clear Analytics</button><button className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); localStorage.removeItem('ecommerce_cart_data'); localStorage.removeItem('ecommerce_wishlist_data'); refresh(); }}>Reset Demo Data</button></div></div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"><h1 className="text-2xl font-bold">Analytics Dashboard</h1><div className="flex flex-wrap gap-2"><button className="rounded-lg border px-3 py-2 text-sm" onClick={() => { generateDemoEvents(products); refresh(); }}>Demo Mode</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={refresh}>Refresh</button><button className="rounded-lg border px-3 py-2 text-sm" onClick={exportJson}>Export JSON</button><button className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); refresh(); }}>Clear Analytics</button><button className="rounded-lg border px-3 py-2 text-sm text-rose-700" onClick={() => { clearEvents(); localStorage.removeItem('ecommerce_cart_data'); localStorage.removeItem('ecommerce_wishlist_data'); localStorage.removeItem('ecommerce_mock_database'); scheduleRemotePush(); refresh(); }}>Reset Demo Data</button></div></div>
       <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-5">
         <MetricCard label="Total Events" value={stats.totalEvents} />
         <MetricCard label="Product Views" value={stats.totalProductViews} />
@@ -399,6 +533,7 @@ export const AboutPage = () => (
   <div className="mx-auto max-w-3xl space-y-4 px-4 py-8">
     <h1 className="text-3xl font-black">About This Demo</h1>
     <p>This ecommerce site is intentionally built for hackathon presentations focused on product browsing and user-behavior analytics.</p>
-    <p>All behavior events and cart data are stored in localStorage, with no backend and no real payment processing.</p>
+    <p>Behavior events and cart data are cached in your browser. With Supabase env vars configured, the same default account syncs to the cloud so other devices and n8n workflows can use one shared dataset.</p>
+    <p>No real payment processing.</p>
   </div>
 );

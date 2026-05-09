@@ -1,7 +1,16 @@
+import {
+  appendEventToDb,
+  getHardcodedUser,
+  markSessionClosed,
+  sendEventToN8n,
+} from './database';
+import { scheduleRemotePush } from './remoteSync';
+
 const ANALYTICS_KEY = 'ecommerce_analytics_events';
 const CONSENT_KEY = 'ecommerce_tracking_consent';
 const SESSION_KEY = 'ecommerce_session_id';
-const USER_ID = 'mock-user-001';
+
+const USER_ID = getHardcodedUser().userId;
 
 const safeRead = (key, fallback) => {
   try {
@@ -22,7 +31,10 @@ const safeWrite = (key, value) => {
 
 export const getConsentStatus = () =>
   localStorage.getItem(CONSENT_KEY) || 'unset';
-export const setConsentStatus = (status) => localStorage.setItem(CONSENT_KEY, status);
+export const setConsentStatus = (status) => {
+  localStorage.setItem(CONSENT_KEY, status);
+  scheduleRemotePush();
+};
 export const isTrackingEnabled = () => getConsentStatus() === 'accepted';
 
 export const getSessionId = () => {
@@ -34,7 +46,10 @@ export const getSessionId = () => {
 };
 
 export const getEvents = () => safeRead(ANALYTICS_KEY, []);
-export const clearEvents = () => safeWrite(ANALYTICS_KEY, []);
+export const clearEvents = () => {
+  safeWrite(ANALYTICS_KEY, []);
+  scheduleRemotePush();
+};
 
 export const trackEvent = (eventType, payload = {}) => {
   if (!isTrackingEnabled()) return null;
@@ -54,7 +69,32 @@ export const trackEvent = (eventType, payload = {}) => {
   const events = getEvents();
   events.push(event);
   safeWrite(ANALYTICS_KEY, events);
+  appendEventToDb(event);
+  sendEventToN8n(event);
   return event;
+};
+
+export const trackWebsiteClosed = (reason = 'browser_closed') => {
+  const closedEvent = {
+    eventId: crypto.randomUUID(),
+    eventType: 'WEBSITE_CLOSED',
+    timestamp: new Date().toISOString(),
+    sessionId: getSessionId(),
+    userId: USER_ID,
+    page: window.location.pathname,
+    productId: null,
+    productName: null,
+    category: null,
+    searchQuery: null,
+    metadata: { reason },
+  };
+
+  const events = getEvents();
+  events.push(closedEvent);
+  safeWrite(ANALYTICS_KEY, events);
+  appendEventToDb(closedEvent);
+  markSessionClosed(closedEvent.sessionId, reason);
+  sendEventToN8n(closedEvent);
 };
 
 export const computeAnalytics = (events) => {

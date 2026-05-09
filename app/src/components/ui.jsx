@@ -28,10 +28,10 @@ export const EmptyState = ({ title, description }) => (
   </div>
 );
 
-export const Navbar = ({ cartCount, wishlistCount }) => {
+export const Navbar = ({ cartCount, wishlistCount, notificationsCount }) => {
   const [open, setOpen] = useState(false);
-  const navItems = ['/', '/products', '/cart', '/wishlist', '/analytics', '/about'];
-  const navLabels = ['Home', 'Products', `Cart (${cartCount})`, `Wishlist (${wishlistCount})`, 'Analytics', 'About'];
+  const navItems = ['/', '/products', '/cart', '/wishlist', '/notifications', '/analytics', '/about'];
+  const navLabels = ['Home', 'Products', `Cart (${cartCount})`, `Wishlist (${wishlistCount})`, `Notifications (${notificationsCount})`, 'Analytics', 'About'];
 
   return (
     <nav className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur">
