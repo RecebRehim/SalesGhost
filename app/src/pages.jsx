@@ -5,6 +5,7 @@ import { trackEvent, getEvents, computeAnalytics, clearEvents, generateDemoEvent
 import { CategoryCard, EmptyState, EventTable, ProductCard, ProductSort, RatingStars, SearchBar, ProductBadge } from './components/ui';
 import {
   addNotification,
+  clearAllNotifications,
   getDb,
   getHardcodedUser,
   getN8nWebhookUrl,
@@ -391,6 +392,18 @@ export const NotificationsPage = ({ notifications, refreshNotifications }) => {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <button
+          className="rounded-lg border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+          type="button"
+          onClick={() => {
+            if (!window.confirm('Delete all notifications and chat (n8n) messages? This clears local data and syncs to the cloud.')) return;
+            clearAllNotifications();
+            setDbSummary(getDb());
+            refreshNotifications();
+          }}
+        >
+          Delete all messages & notifications
+        </button>
         <button className="rounded-lg border px-3 py-2 text-sm font-semibold" onClick={() => { markAllNotificationsRead(); refreshNotifications(); }}>Mark All as Read</button>
         <button className="rounded-lg border px-3 py-2 text-sm font-semibold" onClick={() => { addNotification({ title: 'Demo n8n Alert', message: 'We detected high intent behavior. Follow up with personalized offer.', channel: 'website', metadata: { source: 'manual-demo' } }); refreshNotifications(); }}>Create Demo Notification</button>
         <button

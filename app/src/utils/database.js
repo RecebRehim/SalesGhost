@@ -1,4 +1,4 @@
-import { scheduleRemotePush } from './remoteSync';
+import { broadcastSync, scheduleRemotePush } from './remoteSync';
 
 const DB_KEY = 'ecommerce_mock_database';
 const N8N_WEBHOOK_KEY = 'ecommerce_n8n_webhook_url';
@@ -108,6 +108,17 @@ export const markAllNotificationsRead = () => {
     notification.read = true;
   });
   saveDb(db);
+};
+
+/** Removes all in-app notifications and n8n chat messages, local + cloud sync. */
+export const clearAllNotifications = () => {
+  const db = getDb();
+  db.notifications = [];
+  saveDb(db);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('salesghost-notifications-cleared'));
+  }
+  broadcastSync();
 };
 
 export const getN8nWebhookUrl = () => localStorage.getItem(N8N_WEBHOOK_KEY) || '';

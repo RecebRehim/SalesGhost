@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { getNotifications } from '../utils/database';
+import { clearAllNotifications, getNotifications } from '../utils/database';
 import { isRemoteSyncConfigured, pullRemoteAndMerge } from '../utils/remoteSync';
 
 const isN8nMessage = (item) =>
@@ -22,6 +22,16 @@ export function Chatbot({ onRefresh }) {
   useEffect(() => {
     window.addEventListener('salesghost-sync', refresh);
     return () => window.removeEventListener('salesghost-sync', refresh);
+  }, [refresh]);
+
+  useEffect(() => {
+    const onClear = () => {
+      seenN8nIdsRef.current = new Set();
+      didHydrateRef.current = false;
+      refresh();
+    };
+    window.addEventListener('salesghost-notifications-cleared', onClear);
+    return () => window.removeEventListener('salesghost-notifications-cleared', onClear);
   }, [refresh]);
 
   /** Auto-open when a new n8n message id appears (skip first hydration so we don't open on page load). */
@@ -48,7 +58,7 @@ export function Chatbot({ onRefresh }) {
       refresh();
     }, 8000);
     return () => clearInterval(id);
-  }, [open]);
+  }, [open, refresh]);
 
   useEffect(() => {
     if (open && bottomRef.current) {
@@ -95,6 +105,20 @@ export function Chatbot({ onRefresh }) {
               ))
             )}
             <div ref={bottomRef} />
+          </div>
+          <div className="border-t bg-slate-50 px-3 py-2">
+            <button
+              type="button"
+              className="w-full rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+              onClick={() => {
+                if (!window.confirm('Delete all notifications and chat messages?')) return;
+                clearAllNotifications();
+                setOpen(false);
+                refresh();
+              }}
+            >
+              Clear all messages & notifications
+            </button>
           </div>
         </div>
       )}
